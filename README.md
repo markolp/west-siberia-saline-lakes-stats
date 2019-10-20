@@ -10,4 +10,4 @@ Major ion and trace elements chemistry of fifty-eight samples of southern Siberi
   
   Principal component analysis (PCA) identified four main principal components, with the first principal component (PC1) accounting for 44.3% and representing the process of salinization, and PC2 and PC3 (17.9 and 8.6% of total variance) controlled by water-rock interaction process of carbonates/sulphates precipitation and aluminosilicates formation.
   
-  Full article can be found [here](https://github.com/markolp/west-siberia-saline-lakes-stats/blob/master/e3sconf_wri-162018_07012.pdf)
+  Full article can be found [here](https://github.com/markolp/west-siberia-saline-lakes-stats/blob/master/e3sconf_wri-162018_07012.pdf).

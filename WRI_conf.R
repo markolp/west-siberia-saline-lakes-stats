@@ -1,4 +1,5 @@
 setwd("~/R")
+
 library(readxl)
 library(ggplot2)
 library(gridExtra)
@@ -7,59 +8,46 @@ library(corrgram)
 library(dplyr)
 library(pcaMethods)
 library(hydrogeo)
-# read xls file---------------------------------
-database <- read_excel("WRI/databaseall.xls", sheet = "databaseall")
-#View(database)
 
-# create new dataset with Lake Waters LW in the Type column----------------------
-LWdata <- database[database$Type=="LW", 
-  #| database$Type=="RW" | database$Type=="CW" | database$Type=="GW",
-  ]
-LWdata <- LWdata[LWdata$Country=="RS",
-                 ]
-#LWdata
+# read xls file
+database <- read_excel("WRI/databaseall.xls", sheet = "databaseall")
+View(database)
+
+# filter data for Lake Waters (LW)
+LWdata <- database[database$Type=="LW", ]
+# filter data for Russia
+LWdata <- LWdata[LWdata$Country=="RS", ]
+# filter data for only comlete cases of major chemical elements
 LWdata <- LWdata[complete.cases(LWdata[ ,c('Ca', 'Mg', 'Na', 'K', 'Carb_Alk', 'Cl', 'CO3', 'SO4')]), ]
 write.table(LWdata, "~/LWdata.txt", sep="\t")
 
-# ????Calculating average for the same objects
-# LWdata <- as.data.frame(lapply(split(!is.na(LWdata), LWdata$Name), mean))
-# LWdata %>% 
-#   group_by(Name) %>%
-#   summarise(mean)
-
-# Creat summary table---------------------------------------------------
+# create summary table
 LWdataSum <- LWdata %>%
   group_by(Type) %>% 
   summarise_all( funs(mean(., na.rm = TRUE), min(., na.rm = TRUE), max(., na.rm = TRUE)))
 LWdataSum <- t(LWdataSum)
 write.table(LWdataSum, "~/LWdataSum.txt", sep="\t")
 
-#Selecting the data containing only variables we need for calculations----------------------
-#LWdata <- LWdata[-c(117:119, 126, 144, 173:175), ]
-# Pb, Cu, Zn, Ni, Cd, Co, Sb, Sn, Bi, Hg 
-LWnum <- select(LWdata, pH, #Eh, 
+# select the data containing only variables we need for calculations
+LWnum <- select(LWdata, pH, 
                 Carb_Alk, SO4, Cl, Ca, Mg, Na, Li, 
                 B, Al, Si, P, V, Cr, Mn, Fe, Cu, As, 
                 Br, Sr, Rb, Th, U, Zn, Ni, Cd, Co, Sb, Sn, Bi, Pb)
-#LWnum
-#cor(na.omit(LWnum))
-#sum(is.na(LWnum))
 write.table(LWnum, "~/LWnum.txt", sep="\t")
+
+# create function to count the logarifm of the values
 LogIfNotNA <- function(value) {
-  # if (value == 0) {
-  #  return(value)
-  # }
   if (is.numeric(value)) {
     return(log10(value))
   }
   return(value)
 }
-log.LW <- as.data.frame(apply(LWnum, c(1, 2), LogIfNotNA)) # TODO: rename log.LW into LWlog?
-#View(log.LW)
-# LWdata <- subset(LWdata, (!is.na(LWdata$SampleID))) # deleting rows with all NA data
-#LWdata <- tbl_df(LWdata)
+LWlog <- as.data.frame(apply(LWnum, c(1, 2), LogIfNotNA))
 
-# Creating the table with summary: mean,median,25th and 75th quartiles,min,max---------------
+# deleting rows with all NA data
+LWdata <- subset(LWdata, (!is.na(LWdata$SampleID)))
+
+# creating the table with summary: mean, median, 25th and 75th quartiles, min, max
 LWsum <- lapply(
   select(LWdata, pH:U), 
   summary
@@ -68,61 +56,42 @@ LWsum <- as.data.frame(t(sapply(
   LWsum, `[`, c("Min.","1st Qu.", "Median", "Mean", "3rd Qu.", "Max.", "NA's")
   )))
 write.csv(LWsum, file = "LWsum.csv")
-# Density plot???? Don't adapted----------------------
-# par(mfrow=c(3, 3))
-# colnames <- dimnames(crime.new)[[2]]
-# for (i in 2:8) {
-#   d <- density(crime.new[,i])
-#   plot(d, type="n", main=colnames[i])
-#   polygon(d, col="red", border="gray")
-# }
 
-#normality test for our data shows that only pH data are normaly destributed---------------------------------------
+# normality test for our data shows that only pH data are normaly destributed
 LWsharpo <- lapply(LWnum,
                    shapiro.test
 )
 t(sapply(LWsharpo, `[`, c("statistic",
                           "p.value")
 ))
-# we check if log data are normaly destibuted (TRUE for pH, )
-LWsharpo <- lapply(log.LW,
+# check if log data are normaly destibuted
+LWsharpo <- lapply(LWlog,
                    shapiro.test
                    )
 t(sapply(LWsharpo, `[`, c("statistic",
                           "p.value")
          ))
-log.LW_pairs <- log.LW[ ,1:7]
-pairs(log.LW_pairs, upper.panel=NULL)
-# histogramms-------------------------------------
-hist(LWdata)
 
-# correlation------------------------------------
+# draw correlation matrix for 7 major components
+LWlog_pairs <- LWlog[ ,1:7]
+pairs(LWlog_pairs, upper.panel=NULL)
+
+# check the correlation between Salinity-HCO3 and ph-HCO3 on data with complete cases 
 cor(LWdata$Sal, LWdata$HCO3, use="complete.obs")
 cor(LWdata$pH, LWdata$HCO3, use="complete.obs")
 
-# chemical elements to percents
+# transform data to percentage form
 LWdataPerc <- toPercent(LWdata)
-LWdataPerc[is.na(LWdataPerc)] <- 0 # FIXME: do we need this?
 LWdataPerc<- data.frame(lapply(LWdataPerc, as.numeric, check.names=F))
 LWdataPerc[is.na(LWdataPerc)] <- 0
 LWdataPerc <- mutate(LWdataPerc, HCO3 = HCO3 + CO3)
 
+# create Piper diagram
 piperLW <- piper(LWdataPerc)
 piperLW@pt.col= LWdata$Type
 plot(piperLW, cex=1.8)
 
-# intoEqL <- function(y) {
-#   Eq.Ca <- y['Ca'] / 20.04
-#   Eq.Mg = y['Mg']
-#   Eq.K = y['K']
-#   Eq.Na = y['Na']
-#   Eq.HCO3 = y['HCO3']
-#   Eq.CO3 = y['CO3']
-#   Eq.Cl = y['Cl']
-#   Eq.SO4 = y['SO4']
-#   
-#   return(y['Ca'])}
-
+# create chemical type of the sample based on its concentration in format Anion1-Anion2 Cation1-Cation2 in decrease order
 ToChemType <- function(x) {
   
   cations <- x[c('Ca', 'Mg', 'Na')]
@@ -134,8 +103,9 @@ ToChemType <- function(x) {
   return(paste(
     paste(names(SubAn[order(SubAn, decreasing=TRUE)]), collapse = '-'),
     paste(names(SubCat[order(SubCat, decreasing=TRUE)]), collapse = '-'), collapse = ' '))
-#  return(SubCat[order(SubCat, decreasing=TRUE)])
   }
+
+# creation of chemical types and assignment to the colours
 ChemTypes <- as.data.frame(apply(LWdataPerc, 1, ToChemType))
 colnames(ChemTypes) <- "Type"
 GroupTypes <- function(x) {
@@ -183,133 +153,97 @@ GroupTypes <- function(x) {
   }
   return(x)
 }
-# ChemType$WaterType <- 0
+# generate new columns for chemical types
 GroupedChemTypes <- as.data.frame(t(apply(ChemTypes, 1, GroupTypes))) 
 colnames(GroupedChemTypes) <- c("Type", "ChemicalType", "ColorType")
 
-# PCA--------------------------------------
-# apply PCA - scale. = TRUE is highly 
-# advisable, but default is FALSE. 
-# log.LW.pca <- prcomp(log.LW,
-#                  center = TRUE,
-#                  scale. = TRUE)
+# library for PCA
+library(ade4)
+library(factoextra)
+library(ggbiplot)
 
-library(ade4) # TODO: lift up?
-is.nan.data.frame <- function(x) # TODO: What is it?
+# tests if a numeric value is NaN
+is.nan.data.frame <- function(x)
   do.call(cbind, lapply(x, is.nan))
-log.LW[is.nan(log.LW)] <- NA
+LWlog[is.nan(LWlog)] <- NA
 
-f1 <- function(vec) { # TODO: rename to calculateMean?
-  m <- mean(vec, na.rm = TRUE)
-  vec[is.na(vec)] <- m
-  return(vec)
+# calculate mean values
+calculateMean <- function(concentration) {
+  meanConc <- mean(concentration, na.rm = TRUE)
+  concentration[is.na(concentration)] <- meanConc
+  return(concentration)
 }
 
-Y = apply(log.LW,2,f1) # TODO: what is Y?
+# apply PCA to the LWlog database
+PCAforLWlog = apply(LWlog,2,calculateMean)
+pca <- princomp(PCAforLWlog, cor=TRUE, scores=TRUE)
+pca$n.obs
+pca$center
+pca$loadings
 
-#PCA 
-pca1 <- princomp(Y, cor=TRUE, scores=TRUE)
-# pca1 <- prcomp(Y, scale. = TRUE)
-pca1$n.obs
-pca1$center
-PoV <- pca1$sdev^2/sum(pca1$sdev^2) # TODO: what is PoV?
-PoV
-pca1$loadings
-head(pca1$loadings)
-screeplot(pca1, type="lines", col=3)
-Loadings <- as.data.frame(pca1$loadings[,1:4])
-scores <- as.data.frame(pca1$scores[,1:4])
-library(factoextra) # TODO: lift up?
-fviz_eig(pca1)
-fviz_pca_var(pca1, 
+# draw a scree plot that displays how much variation each principal component captures from the data
+screeplot(pca, type="lines", col=3)
+fviz_eig(pca)
+
+# Draw PCA loadings ploat and score plots
+fviz_pca_var(pca, 
              axes = c(2, 3),
              col.var  = "contrib", # Color by the quality of representation
              gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
              repel = TRUE     # Avoid text overlapping
 )
-# Draw ...
-library(ggbiplot) # TODO: lift up?
-log.LW.Sal <- log.LW[, 11]
-pairs(pca1$x)
-g <- ggbiplot(pca1, choices = 1:2, 
+
+# Draw biplot of PCA
+g <- ggbiplot(pca, choices = 1:2, 
               obs.scale = 1, 
               var.scale = 0,
               var.axes = F,
               group = ChemType$Type, 
               ellipse = TRUE
-              #circle = TRUE
               )
 g <- g + xlim(-8, 8) + ylim(-6, 8)
 g <- g + theme(legend.direction = 'vertical', 
                legend.position = 'right')
 print(g)
 
-# hierarhial clusters analysis-------------------------
-clusters <- hclust(dist(log.LW), method = "ward.D"
+# hierarhial clusters analysis
+clusters <- hclust(dist(LWlog), method = "ward.D"
                    )
 plot(clusters, labels=LWdata$Name
      )
+
 rect.hclust(clusters, k = 4, border = 2:5)
 clusterCut <- cutree(clusters, 4)
-log.LW.2 <- data.frame(t(na.omit(t(log.LW))))
-pca.Sample.2 <- prcomp(log.LW.2, retx=TRUE)
-fviz_cluster(list(data = log.LW.2, cluster = clusterCut))
+
+# visualize clustering results
+LWlog2 <- data.frame(t(na.omit(t(LWlog))))
+pca.Sample.2 <- prcomp(LWlog2, retx=TRUE)
+fviz_cluster(list(data = LWlog2, cluster = clusterCut))
+
+# see how many samples in each type
 table(clusterCut, LWdata$Type)
-#hierarhial for columns-------------------------------
-clusters <- hclust(dist(t(log.LW)), method = "ward.D"
-)
-plot(clusters
-)
-#heatmap or two dendrogams-----------------------------
-clustersm <- as.matrix(log.LW)
+
+# cluster dendrogram for columns
+clusters_col <- hclust(dist(t(LWlog)), method = "ward.D")
+plot(clusters_col)
+
+# two dendrogams together for both cols and rows
+clustersm <- as.matrix(LWlog)
 heatmap(clustersm, Colv=F, scale='none')
-#plot 3D diagramm--------------------------------------
-# library(rgl) #package doesn't load
-# plot3d(pca1$scores[ ,1:3], col=ChemType$ColorType, xlim = c(-5, 5), zlim = c(-5, 5))
-# # text3d(pca1$scores[ ,1:3], texts=rownames(log.LW))
-# text3d(pca1$loadings[ ,1:3], texts=rownames(pca1$loadings), col="red")
-# coords <- NULL
-# for (i in 1:nrow(pca1$loadings)) {
-#   coords <- rbind(coords, rbind(c(0,0,0), pca1$loadings[i, 1:3]))
-# }
-# lines3d(coords, col="red", lwd = 4)
 
-# pcaY = dudi.pca(Y,center=TRUE,scale=FALSE,nf=5,scannf=FALSE) # haven't used
-
-# s.label(pcaY$li) 
-# head(pcaY$li)
-# scores = as.data.frame(pca1$x)
-# ggplot(data = scores, aes(x = PC1, y = PC2, label = rownames(scores))) +
-#   geom_hline(yintercept = 0, colour = "gray65") +
-#   geom_vline(xintercept = 0, colour = "gray65") +
-#   geom_text(colour = "tomato", alpha = 0.8, size = 4) +
-#   ggtitle("PCA plot of USA States - Crime Rates")
-
-# ploting point diagrams-----------------------------------------
-salinityAndConcHC03 <- ggplot(data=LWdata, 
-             aes(log(Sal), 
-                 log(HCO3))) +
-  geom_point(
-    mapping = aes(col=Country)) +
-#  geom_point(data=LWdata, aes(Sal/1000, Ca/1000, col=Country), shape=17) +
+# ploting 2 point diagrams on one figure
+salinityAndConcHC03 <- 
+  ggplot(data=LWdata, aes(log(Sal), log(HCO3))) +
+  geom_point(mapping = aes(col=Country)) +
   geom_smooth(method = lm, color = "black", formula = y ~ x) +
-#  scale_x_log10() +
-#  scale_y_log10() +
-  labs( x = "log(Sal), g/L", 
-        y = "log(Conc.), g/L",
-        title = "Sal-HCO3")
-
+  labs(x = "log(Sal), g/L", y = "log(Conc.), g/L", title = "Sal-HCO3")
 plot(salinityAndConcHC03)
 
-pHAndConcHC03 <- ggplot(data=LWdata, 
-             aes(pH, log(HCO3)))+
- geom_point(mapping = aes(col=Country))+
- geom_smooth(method = lm, color = "black") +
-#  geom_point(data=LWdata, aes(pH, Ca/1000), color = "blue")+
-#  scale_y_log10() +
-  labs( x = "pH", 
-        y = "log(Conc.), g/L", 
-        title = "pH-HCO3")
+pHAndConcHC03 <- 
+  ggplot(data=LWdata, aes(pH, log(HCO3))) +
+  geom_point(mapping = aes(col=Country)) +
+  geom_smooth(method = lm, color = "black") +
+  labs( x = "pH", y = "log(Conc.), g/L", title = "pH-HCO3")
 plot(pHAndConcHC03)
 
 grid.arrange(salinityAndConcHC03, pHAndConcHC03)

@@ -1,4 +1,4 @@
-## Using the multivariate statistical analysis for understanding of chemical evolution of saline lakes in south part of western Siberia
+## Multivariate statistical analysis for understanding of chemical evolution of saline lakes of western Siberia
 
 Major ion and trace elements chemistry of fifty-eight samples of southern Siberia (Russia) were analysed with a suit of statistical techniques, in an effort to explain the key processes affecting geochemical evolution of saline lakes. The database included data about groundwater, cell water, river water and lakes water. 
 
